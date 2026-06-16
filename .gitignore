@@ -1,0 +1,32 @@
+# Project-specific
+# ~500MB downloaded Wikipedia FAISS index, regenerated on first run
+wiki_rag_data/
+# local secrets, e.g. ANTHROPIC_API_KEY
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings (per-machine, not shared)
+.claude/settings.local.json
