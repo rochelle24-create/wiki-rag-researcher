@@ -5,26 +5,24 @@ Run locally:   streamlit run app.py
 Deploy:        push to GitHub → connect at share.streamlit.io
 
 Requirements:
-  • Ollama running locally  →  https://ollama.com  then: ollama pull llama3.2
-  • wiki-rag index          →  auto-downloaded on first use (~500 MB)
+  • An API key for Anthropic and/or OpenAI (see .env.example)
+  • wiki-rag index  →  auto-downloaded on first use (~500 MB)
 """
 
 import os
 
 from dotenv import load_dotenv
 
-load_dotenv()  # pulls ANTHROPIC_API_KEY (etc.) from a local .env file, if present.
+load_dotenv()  # pulls ANTHROPIC_API_KEY / OPENAI_API_KEY from a local .env file, if present.
                # .env is git-ignored — see .env.example for the expected format.
 
 import streamlit as st
 from rag_engine import (
-    check_ollama,
     generate_report,
     load_vectorstore,
-    DEFAULT_OLLAMA_URL,
-    DEFAULT_OLLAMA_MODEL,
     ANTHROPIC_MODELS,
     DEFAULT_ANTHROPIC_MODEL,
+    DEFAULT_OPENAI_MODEL,
     ResearchReport,
 )
 
@@ -115,45 +113,16 @@ with st.sidebar:
 
     provider = st.radio(
         "LLM provider",
-        options=["Ollama (local)", "Anthropic (API)"],
-        help="Ollama runs fully offline on your machine. Anthropic uses the hosted Claude API and requires an API key.",
+        options=["Anthropic (API)", "OpenAI (API)"],
+        help="Both are hosted APIs and require an API key (see .env.example).",
     )
 
-    health = {"ok": False, "models": []}
-    ollama_url = DEFAULT_OLLAMA_URL
-    ollama_model = DEFAULT_OLLAMA_MODEL
     anthropic_api_key = ""
     anthropic_model = DEFAULT_ANTHROPIC_MODEL
+    openai_api_key = ""
+    openai_model = DEFAULT_OPENAI_MODEL
 
-    if provider == "Ollama (local)":
-        ollama_url = st.text_input(
-            "Ollama URL",
-            value=DEFAULT_OLLAMA_URL,
-            help="URL where Ollama is running.",
-        )
-
-        health = check_ollama(ollama_url)
-        if health["ok"]:
-            st.markdown('<span class="status-ok">● Ollama connected</span>', unsafe_allow_html=True)
-            if health["models"]:
-                model_options = health["models"]
-            else:
-                model_options = [DEFAULT_OLLAMA_MODEL]
-                st.caption(
-                    f"⚠️ No models pulled yet. Run:  `ollama pull {DEFAULT_OLLAMA_MODEL}`"
-                )
-        else:
-            st.markdown('<span class="status-err">● Ollama not reachable</span>', unsafe_allow_html=True)
-            st.caption("Start Ollama:  `ollama serve`")
-            model_options = [DEFAULT_OLLAMA_MODEL]
-
-        ollama_model = st.selectbox(
-            "Model",
-            options=model_options,
-            index=0,
-            help="Choose which Ollama model to use. Recommended: llama3.2 or mistral.",
-        )
-    else:
+    if provider == "Anthropic (API)":
         anthropic_api_key = st.text_input(
             "Anthropic API key",
             value=os.environ.get("ANTHROPIC_API_KEY", ""),
@@ -171,6 +140,23 @@ with st.sidebar:
             index=0,
             help="Choose which Claude model to use.",
         )
+    else:
+        openai_api_key = st.text_input(
+            "OpenAI API key",
+            value=os.environ.get("OPENAI_API_KEY", ""),
+            type="password",
+            help="Defaults to the OPENAI_API_KEY environment variable if set.",
+        )
+        if openai_api_key:
+            st.markdown('<span class="status-ok">● API key set</span>', unsafe_allow_html=True)
+        else:
+            st.markdown('<span class="status-err">● No API key provided</span>', unsafe_allow_html=True)
+
+        openai_model = st.text_input(
+            "Model",
+            value=DEFAULT_OPENAI_MODEL,
+            help="Any OpenAI chat model name, e.g. gpt-4o-mini, gpt-4o, gpt-4.1.",
+        )
 
     st.markdown("---")
 
@@ -186,10 +172,10 @@ with st.sidebar:
     st.markdown("**About**")
     st.caption(
         "Retrieves Wikipedia articles using a local FAISS vector index, "
-        "then asks an LLM (Ollama or Anthropic) to synthesise a structured report."
+        "then asks an LLM (Anthropic or OpenAI) to synthesise a structured report."
     )
     st.caption("📦 [wiki-rag on GitHub](https://github.com/RoyRin/wiki-rag)")
-    st.caption("🦙 [Ollama](https://ollama.com)  ·  🤖 [Anthropic](https://www.anthropic.com)")
+    st.caption("🤖 [Anthropic](https://www.anthropic.com)  ·  🧠 [OpenAI](https://platform.openai.com)")
 
     st.markdown("---")
     if st.button("⬇️ Pre-load Wikipedia index", use_container_width=True):
@@ -233,25 +219,13 @@ run = st.button("🔍 Research", type="primary")
 # ── Run ────────────────────────────────────────────────────────────────────────
 
 if run and query.strip():
-    if provider == "Ollama (local)":
-        if not health["ok"]:
-            st.error(
-                f"Ollama is not reachable at **{ollama_url}**.\n\n"
-                "1. Install Ollama: https://ollama.com\n"
-                "2. `ollama serve`\n"
-                "3. `ollama pull llama3.2`"
-            )
-            st.stop()
-
-        if health["models"] and ollama_model not in health["models"]:
-            st.error(
-                f"Model **{ollama_model}** is not pulled yet.\n\n"
-                f"Run:  `ollama pull {ollama_model}`"
-            )
-            st.stop()
-    else:
+    if provider == "Anthropic (API)":
         if not anthropic_api_key:
             st.error("Please enter an Anthropic API key in the sidebar.")
+            st.stop()
+    else:
+        if not openai_api_key:
+            st.error("Please enter an OpenAI API key in the sidebar.")
             st.stop()
 
     with st.spinner("🔎 Searching Wikipedia + generating report…"):
@@ -259,11 +233,11 @@ if run and query.strip():
             report: ResearchReport = generate_report(
                 query=query.strip(),
                 num_sources=num_sources,
-                provider="anthropic" if provider == "Anthropic (API)" else "ollama",
-                ollama_url=ollama_url,
-                ollama_model=ollama_model,
+                provider="openai" if provider == "OpenAI (API)" else "anthropic",
                 anthropic_api_key=anthropic_api_key,
                 anthropic_model=anthropic_model,
+                openai_api_key=openai_api_key,
+                openai_model=openai_model,
             )
         except RuntimeError as e:
             st.error(str(e))

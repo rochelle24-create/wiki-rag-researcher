@@ -1,8 +1,8 @@
 # 📚 Wikipedia Research Assistant
 
-A local AI research assistant that retrieves Wikipedia articles via a FAISS vector
-index ([wiki-rag](https://github.com/RoyRin/wiki-rag)) and uses Ollama to synthesise
-structured reports — fully offline after first setup.
+A research assistant that retrieves Wikipedia articles via a FAISS vector
+index ([wiki-rag](https://github.com/RoyRin/wiki-rag)) and uses a hosted LLM
+(Anthropic or OpenAI) to synthesise structured reports.
 
 ---
 
@@ -14,14 +14,14 @@ structured reports — fully offline after first setup.
 pip install -r requirements.txt
 ```
 
-### 2. Install and start Ollama
-
-Download from https://ollama.com, then:
+### 2. Add your API key(s)
 
 ```bash
-ollama serve          # start the server
-ollama pull llama3.2  # download a model (or mistral, phi3, etc.)
+cp .env.example .env
+# then edit .env and fill in ANTHROPIC_API_KEY and/or OPENAI_API_KEY
 ```
+
+`.env` is git-ignored — your keys are never committed or pushed.
 
 ### 3. Run the app
 
@@ -42,57 +42,37 @@ Open http://localhost:8501 in your browser.
 
 ```
 wiki-research-assistant/
-├── app.py           # Streamlit UI
-├── rag_engine.py    # All RAG + Ollama logic
+├── app.py            # Streamlit UI
+├── rag_engine.py      # All RAG + LLM logic
 ├── requirements.txt
+├── .env.example       # Template for your API keys (copy to .env)
 └── README.md
 ```
 
 ---
 
+## Choosing a provider
+
+Pick Anthropic or OpenAI from the sidebar radio button. Each needs its own
+API key, entered in the sidebar or read automatically from `.env`:
+
+| Provider  | Env var             | Default model    |
+|-----------|---------------------|-------------------|
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` |
+| OpenAI    | `OPENAI_API_KEY`    | `gpt-4o-mini`        |
+
+The Anthropic model is picked from a dropdown (`ANTHROPIC_MODELS` in
+`rag_engine.py`); the OpenAI model is a free-text field so you can type any
+current model name.
+
+---
+
 ## Deploying to Streamlit Community Cloud
 
-1. Push this folder to a GitHub repository.
+1. Push this folder to a GitHub repository (`.env` stays local, never pushed).
 2. Go to https://share.streamlit.io and connect your repo.
 3. Set **Main file path** to `app.py`.
-
-> ⚠️ Streamlit Cloud does not run Ollama. For cloud deployment, swap
-> `call_ollama()` in `rag_engine.py` for the Anthropic or OpenAI API.
-> See the "Cloud LLM swap" section below.
-
----
-
-## Cloud LLM swap (for Streamlit Cloud)
-
-Replace the body of `call_ollama()` in `rag_engine.py` with:
-
-```python
-import anthropic
-
-def call_ollama(prompt, system="", base_url=None, model=None):
-    client = anthropic.Anthropic()   # reads ANTHROPIC_API_KEY from env
-    msg = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2048,
-        system=system,
-        messages=[{"role": "role": "user", "content": prompt}],
-    )
-    return msg.content[0].text
-```
-
-Then add `ANTHROPIC_API_KEY` in Streamlit Cloud → App settings → Secrets.
-
----
-
-## Changing the Ollama model
-
-In `rag_engine.py`:
-
-```python
-DEFAULT_OLLAMA_MODEL = "mistral"   # or phi3, gemma3, deepseek-r1, etc.
-```
-
-Or just pick it from the sidebar dropdown while the app is running.
+4. In App settings → Secrets, add `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY`.
 
 ---
 
@@ -109,7 +89,7 @@ wiki-rag FAISS index
 Retrieved article titles + excerpts
     │
     ▼
-Ollama prompt  (sources + research question)
+LLM prompt (Anthropic or OpenAI)  —  sources + research question
     │
     ▼
 Structured JSON report
